@@ -2,8 +2,8 @@ beautifulsoup4==4.12.3
 fpdf2==2.7.9
 openai==1.42.0
 Pillow==10.1.0
-Pillow==10.4.0
 python-dotenv==1.0.1
 qrcode==7.4.2
 Requests==2.32.3
 spotipy==2.24.0
+uharfbuzz==0.39.3

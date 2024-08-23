@@ -1,7 +1,9 @@
 import glob
 import os
 import re
-from typing import List, Tuple, Dict    
+from datetime import datetime, timedelta
+import locale
+from typing import List, Tuple, Dict
 
 import requests
 from bs4 import BeautifulSoup
@@ -10,63 +12,63 @@ from services.azure_openai_service import AzureOpenAIService
 from services.bing_image_service import BingImageService
 from services.spotify_service import create_spotify_playlist
 from services.pdf_service import PDFService
-from utils.date_utils import check_future_date, get_preceding_7_days_with_year
 from utils.html_utils import extract_html_section, extract_news
 from utils.image_utils import is_valid_image_format, save_image
 
+locale.setlocale(locale.LC_TIME, "de_DE")
+
 class PubQuizPrep:
-    def __init__(self, model: str, temperature: float):
+    def __init__(self, quiz_date: str, model: str, temperature: float):
+        self.quiz_date = datetime.strptime(quiz_date, "%Y-%m-%d").date()
         self.azure_service = AzureOpenAIService(model, temperature)
         self.bing_service = BingImageService()
         self.pdf_service = PDFService()
         
-    def get_news(self, day: str, month: str) -> str:
+    def get_news(self) -> str:
         print(f"Beginne Zusammenfassung der Nachrichten der letzten Woche...")
 
-        relevant_dates = get_preceding_7_days_with_year(day, month)
+        preceding_days = [(self.quiz_date - timedelta(days=i)) for i in range(1, 8)]
         news_summary = {}
         
-        for d, m, y in relevant_dates:
-            url = f"https://en.wikipedia.org/wiki/Portal:Current_events/{y}_{m}_{d}"
+        for d in preceding_days:
+            url = f"https://en.wikipedia.org/wiki/Portal:Current_events/{d.year}_{d.strftime("%B")}_{d.day}"
             try:
                 response = requests.get(url)
                 response.raise_for_status()
                 soup = BeautifulSoup(response.text, 'html.parser')
-                news_summary[f"{d}. {m} {y}"] = extract_news(soup)
+                news_summary[d] = extract_news(soup)
             except requests.RequestException as e:
-                print(f"Fehler beim Extrahieren der Nachrichten vom {d}-{m}-{y}: {e}")
+                print(f"Fehler beim Extrahieren der Nachrichten vom {d}: {e}")
                 continue
         
         news_summary = ''.join(f"Datum: {title}\nNachrichten: \n'''{content}'''\n\n" for title, content in news_summary.items()).strip()
         
         prompt = f"""
-        Erstelle eine Liste der signifkantesten Nachrichten mehrerer Tage. Dazu erhältst du eine Quelle, die sowohl das Datum als auch die 
-        bereits zusammengefassten Inhalte der Nachrichten dieses Datums beinhaltet. Die Nachrichten sind hierbei durch ''' am Anfang und am Ende gekennzeichnet.
-        Da es sich um die gesamten Nachrichten mehrerer Tage handelt, können Redundanzen und Wiederholungen auftreten. Wiederholungen implizieren keine höhere Wichtigkeit, ignoriere sie einfach.
-        Besonders wichtig sind große sportliche Ereignisse, vor allem das Austragungsland und Sieger, sowie Tode bekannter Persönlichkeiten oder Wechsel der politischen Führung eines Landes.
-        Achte außerdem auf die globale Relevanz der Nachrichten, lokale Ereignisse sind weniger wichtig. 
+        Erstelle eine Liste der 20 wichtigsten Nachrichtenmeldungen. Dazu erhältst du eine Quelle, die sowohl das Datum als auch die Inhalte der Nachrichtenmeldungen dieses Tages beinhaltet.
+        Die Nachrichtenmeldungen sind hierbei durch ''' am Anfang und Ende gekennzeichnet.
+        Da es sich um die Nachrichtenmeldungen mehrerer Tage handelt, können Redundanzen und Wiederholungen auftreten. Wiederholungen implizieren keine höhere Wichtigkeit, ignoriere sie einfach.
+        Achte außerdem auf die globale Relevanz der Nachrichtenmeldungen, lokale Ereignisse sind weniger wichtig. 
         Kriegerische Auseinandersetzungen sind nicht sehr interessant.         
         Hier ist deine Quelle, die du als Kontext nehmen musst:
         ### {news_summary} ###
-        Fasse nun die signifkantesten Nachrichten zusammen. Halte dich dabei strikt an den obigen Kontext. 
-        Besonders wichtig sind große sportliche Ereignisse (vor allem Austragungsland und Sieger), sowie Tode bekannter Persönlichkeiten oder Wechsel in der politischen Führung eines Landes.
-        Beachte, dass die Nachrichten zwar auf Englisch sind, die Liste der signifkantesten Nachrichten aber auf Deutsch sein muss. 
-        Erstelle als Ergebnis eine sortierte Liste nach Relevanz ohne weitere Bemerkungen.
+        Erstelle nun eine Liste der 20 wichtigsten Nachrichtenmeldungen. Halte dich dabei strikt an den obigen Kontext. 
+        Besonders wichtig sind dabei große sportliche Ereignisse (vor allem Austragungsland und Sieger), sowie Tode bekannter Persönlichkeiten oder Wechsel in der politischen Führung eines Landes.
+        Beachte, dass die Nachrichtenmeldungen zwar auf Englisch sind, die Liste aber auf Deutsch sein muss. Erstelle eine Liste, sortiert nach Relevanz, ohne weitere Bemerkungen.
         """
-        
-        response = self.azure_service.create_completion(prompt, "Du bist ein Experte im prägnanten Zusammenfassen der wichtigsten Nachrichten.")
-        print(f"Nachrichten zwischen dem {relevant_dates[-1][0]}. und {day}. {month} erfolgreich zusammengefasst!")        
+
+        response = self.azure_service.create_completion(prompt, "Du bist ein Experte im prägnanten Zusammenfassen der wichtigsten Nachrichtenmeldungen.")
+        print(f"Nachrichten zwischen {preceding_days[-1]} und {preceding_days[0]} erfolgreich zusammengefasst!")      
         return response
     
-    def day_of_year_summary(self, day: str, month: str) -> str:
+    def day_of_year_summary(self) -> str:
         print(f"Beginne Zusammenfassung des Tages...")
-        url = f"https://de.wikipedia.org/wiki/{day}._{month}"
+        url = f"https://de.wikipedia.org/wiki/{self.quiz_date.day}._{self.quiz_date.strftime("%B")}"
         try:
             response = requests.get(url)
             response.raise_for_status()
             soup = BeautifulSoup(response.text, 'html.parser')
         except requests.RequestException as e:
-            print(f"Fehler beim Extrahieren der Daten für den {day}-{month}: {e}")
+            print(f"Fehler beim Extrahieren der Daten für den {self.quiz_date}: {e}")
             return ""
 
         events = extract_html_section(soup, "Ereignisse", "Geboren")
@@ -84,7 +86,7 @@ class PubQuizPrep:
         res_dict = {}
         for title, content in data_dict.items():
             prompt = f"""
-            Fasse die wichtigsten {title} des {day}. {month} im Laufe der Geschichte zusammen.
+            Fasse die wichtigsten {title} des {self.quiz_date.day}. {self.quiz_date.strftime("%B")} im Laufe der Geschichte zusammen.
             Beachte dabei, die Zusammenfassung auf die für die Menschheitsgeschichte signifkantesten Ereignisse und Personen zu beschränken.
             Konzentriere dich außerdem auf die jüngere Geschichte, vor allem des 20. und 21. Jahrhunderts, aber wenn weiter zurückliegende Ereignisse extrem signifikant waren, dürfen sie ebenfalls auftauchen.
             Gib eine Liste mit bis zu 20 {title} zurück. Hier deine Quelle, die du als Kontext nehmen musst:
@@ -136,34 +138,34 @@ class PubQuizPrep:
         
         prompt = f"""
         Erstelle eine numerierte Liste der {num} signifkantesten Songs, die das Thema '{topic}' als Kernthema, im Titel oder als Interpreten haben.
-        Konzentriere dich auf englische sowie deutsche Songs. Gib eine Antwort ohne Erklärung und benutze keine Anführungszeichen.
+        Konzentriere dich auf englische sowie deutsche Songs. Gib deine Antwort in einer numerierten Liste und antworte ohne Erklärung.
+        Folge strikt dem Format 'Interpret - Songtitel'.
         """
         
         response = self.azure_service.create_completion(prompt, "Du bist ein Experte für Musik.")
-        songs_dict = {artist.strip(): title.strip('"') for title, artist in re.findall(r'\d+\.\s*([^-\d]+)\s*-\s*([^0-9]+)', response)}
+        songs_dict = {artist.strip(): title.strip() for artist, title in re.findall(r'\d+\.\s*([^-\d]+)\s*-\s*([^0-9]+)', response)}
         if not songs_dict: 
             print("Songs waren zur Erstellung einer Playlist nicht extrahierbar.")
             raise SystemExit("Exiting program due to empty dictionary.")
         
         playlist_url, img = create_spotify_playlist(songs_dict, topic)
-             
         print(f"Musikrunde fertiggestellt!")
         return response, playlist_url, img
 
-    def prepare_quiz(self, day: str, month: str, image_topic: str, image_num: int, music_theme: str, music_num: int):
-        if check_future_date(day, month):
-            print(f"Der {day}.{month} liegt in der Zukunft. Die Vorbereitung kann nicht gestartet werden.")
+    def prepare_quiz(self, image_topic: str, image_num: int, music_theme: str, music_num: int):
+        if self.quiz_date > datetime.now().date():
+            print(f"Das Datum {self.quiz_date} liegt in der Zukunft. Die Vorbereitung für das Pub Quiz kann nicht gestartet werden.")
             return
         
-        print(f"Vorbereitung für das Pub Quiz am {day}. {month} gestartet!")
+        print(f"Vorbereitung für das Pub Quiz am {self.quiz_date} gestartet!")
 
         # News
-        news = self.get_news(day, month)
+        news = self.get_news()
         self.pdf_service.add_news(news)
 
         # Summary
-        day_summary = self.day_of_year_summary(day, month)
-        self.pdf_service.add_summary(day, month, day_summary)
+        day_summary = self.day_of_year_summary()
+        self.pdf_service.add_summary(self.quiz_date, day_summary)
 
         # Image round
         images = self.image_round(image_topic, image_num)
@@ -178,5 +180,5 @@ class PubQuizPrep:
             os.remove(file_path)
 
         # Save results
-        self.pdf_service.save_pdf(day, month)
-        print(f"Vorbereitung für das Pub Quiz am {day}. {month} abgeschlossen!")
+        self.pdf_service.save_pdf(self.quiz_date)
+        print(f"Vorbereitung für das Pub Quiz am {self.quiz_date} abgeschlossen!")

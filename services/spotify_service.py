@@ -16,7 +16,7 @@ def create_spotify_playlist(songs_dict, topic):
 
     user_id = sp.current_user()['id']
     playlist_name = f"Pub Quiz Playlist: {topic}"
-    playlist_description = "A playlist created automatically from a dictionary of artists and songs."
+    playlist_description = "An automatically created playlist for a pub quiz."
     playlist = sp.user_playlist_create(user=user_id, name=playlist_name, public=True, description=playlist_description)
     playlist_id = playlist['id']
 
@@ -31,6 +31,7 @@ def create_spotify_playlist(songs_dict, topic):
 
     if track_ids:
         sp.playlist_add_items(playlist_id, track_ids)
+        print(f"{len(track_ids)} Songs konnten der Spotify Playlist hinzugefügt werden!")
         
     # Generate the QR code
     playlist_url = playlist['external_urls']['spotify']

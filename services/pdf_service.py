@@ -25,7 +25,7 @@ class PDFService:
         self.pdf.set_font(FONT, size=FONT_SIZE_TEXT)
         self.pdf.multi_cell(0, 10, news)
 
-    def add_summary(self, day, month, summary):
+    def add_summary(self, quiz_date, summary):
         FONT = "DejaVuSansCondensed"
         FONT_STYLE = "B"
         FONT_SIZE_TITLE = 16
@@ -33,7 +33,7 @@ class PDFService:
 
         self.pdf.add_page()
         self.pdf.set_font(FONT, style=FONT_STYLE, size=FONT_SIZE_TITLE)
-        self.pdf.multi_cell(0, 10, f"Zusammenfassung des {day}. {month}:")
+        self.pdf.multi_cell(0, 10, f"Zusammenfassung von {quiz_date}:")
         self.pdf.ln(5)
         self.pdf.set_font(FONT, size=FONT_SIZE_TEXT)
         self.pdf.multi_cell(0, 10, summary)
@@ -104,10 +104,10 @@ class PDFService:
         self.pdf.ln(10)
         self.pdf.image(qr_code, x=(self.pdf.w - 80) / 2, w=80, h=80)
 
-    def save_pdf(self, day, month):
+    def save_pdf(self, quiz_date):
         output_dir = "output"
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
         
-        file_path = os.path.join(output_dir, f"pub_quiz_{day}_{month}.pdf")
+        file_path = os.path.join(output_dir, f"{quiz_date}_pub_quiz_prep.pdf")
         self.pdf.output(file_path)
