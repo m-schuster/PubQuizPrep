@@ -25,7 +25,7 @@ class PubQuizPrep:
         self.pdf_service = PDFService()
         
     def get_news(self) -> str:
-        print(f"Beginne Zusammenfassung der Nachrichten der letzten Woche...")
+        print(f"Beginne Zusammenfassung der Nachrichten der dem Quiz Datum vorangehenden Woche...")
 
         preceding_days = [(self.quiz_date - timedelta(days=i)) for i in range(1, 8)]
         news_summary = {}
@@ -37,26 +37,26 @@ class PubQuizPrep:
                 response.raise_for_status()
                 soup = BeautifulSoup(response.text, 'html.parser')
                 news_summary[d] = extract_news(soup)
+                if len(news_summary[d]) < 100:
+                    print(f"Für die Nachrichten vom {d} wurden sehr wenige Inhalte gefunden. Inhalte: '{news_summary[d]}'")
             except requests.RequestException as e:
                 print(f"Fehler beim Extrahieren der Nachrichten vom {d}: {e}")
                 continue
-        
-        news_summary = ''.join(f"Datum: {title}\nNachrichten: \n'''{content}'''\n\n" for title, content in news_summary.items()).strip()
-        
+
+        news_summary = ''.join(f"{content}\n" for content in news_summary.values() if len(content) > 10).strip()
+
         prompt = f"""
-        Erstelle eine Liste der 20 wichtigsten Nachrichtenmeldungen. Dazu erhältst du eine Quelle, die sowohl das Datum als auch die Inhalte der Nachrichtenmeldungen dieses Tages beinhaltet.
-        Die Nachrichtenmeldungen sind hierbei durch ''' am Anfang und Ende gekennzeichnet.
-        Da es sich um die Nachrichtenmeldungen mehrerer Tage handelt, können Redundanzen und Wiederholungen auftreten. Wiederholungen implizieren keine höhere Wichtigkeit, ignoriere sie einfach.
-        Achte außerdem auf die globale Relevanz der Nachrichtenmeldungen, lokale Ereignisse sind weniger wichtig. 
-        Kriegerische Auseinandersetzungen sind nicht sehr interessant.         
+        Erstelle eine Liste der 20 wichtigsten Nachrichtenmeldungen. Dazu erhältst du eine Quelle, die die Inhalte der Nachrichtenmeldungen mehrerer Tage beinhaltet.
+        Da es sich um die Nachrichtenmeldungen mehrerer Tage handelt, können Redundanzen und Wiederholungen auftreten. Wiederholungen bedeuten keine höhere Wichtigkeit, ignoriere Wiederholungen deshalb.
         Hier ist deine Quelle, die du als Kontext nehmen musst:
         ### {news_summary} ###
-        Erstelle nun eine Liste der 20 wichtigsten Nachrichtenmeldungen. Halte dich dabei strikt an den obigen Kontext. 
-        Besonders wichtig sind dabei große sportliche Ereignisse (vor allem Austragungsland und Sieger), sowie Tode bekannter Persönlichkeiten oder Wechsel in der politischen Führung eines Landes.
-        Beachte, dass die Nachrichtenmeldungen zwar auf Englisch sind, die Liste aber auf Deutsch sein muss. Erstelle eine Liste, sortiert nach Relevanz, ohne weitere Bemerkungen.
+        Erstelle nun eine Liste der 20 wichtigsten Nachrichtenmeldungen. Halte dich dabei strikt an den Kontext und nenne jede Nachrichtenmeldung nur ein einziges Mal.
+        Besonders hervorzuheben sind große sportliche Ereignisse (Austragungsland und Sieger), sowie Tode bekannter Persönlichkeiten oder Wechsel in der politischen Führung eines Landes.
+        Ignoriere hingegen kriegerische Auseinandersetzungen.
+        Beachte, dass die Nachrichtenmeldungen zwar auf Englisch sind, die Liste aber auf Deutsch sein muss. Erstelle nun eine Liste, sortiert nach Relevanz, ohne weitere Bemerkungen.
         """
 
-        response = self.azure_service.create_completion(prompt, "Du bist ein Experte im prägnanten Zusammenfassen der wichtigsten Nachrichtenmeldungen.")
+        response = self.azure_service.create_completion(prompt, "Du bist ein Experte im prägnanten und korrekten Zusammenfassen der wichtigsten Nachrichtenmeldungen.")
         print(f"Nachrichten zwischen {preceding_days[-1]} und {preceding_days[0]} erfolgreich zusammengefasst!")      
         return response
     
@@ -154,9 +154,7 @@ class PubQuizPrep:
 
     def prepare_quiz(self, image_topic: str, image_num: int, music_theme: str, music_num: int):
         if self.quiz_date > datetime.now().date():
-            print(f"Das Datum {self.quiz_date} liegt in der Zukunft. Die Vorbereitung für das Pub Quiz kann nicht gestartet werden.")
-            return
-        
+            print(f"Achtung: Das Datum {self.quiz_date} liegt in der Zukunft. Die Zusammenfassung der Nachrichten kann eventuell nicht korrekt durchgeführt werden.")        
         print(f"Vorbereitung für das Pub Quiz am {self.quiz_date} gestartet!")
 
         # News
